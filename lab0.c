@@ -1,3 +1,4 @@
+#include <X11/Xutil.h>
 #include <X11/Xlib.h>     // Основная библиотека Xlib
 #include <X11/keysym.h>   // Константы клавиш (например XK_Escape)
 #include <stdio.h>        // printf
