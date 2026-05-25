@@ -1,5 +1,4 @@
 #include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <X11/keysym.h>
 
 #include <stdio.h>
@@ -7,11 +6,10 @@
 #include <string.h>
 
 /*
-    ==================================================
+    ==========================================
     ЛАБА 3
-    Простейший графический редактор
-    Несколько цветов
-    ==================================================
+    Paint с несколькими цветами
+    ==========================================
 */
 
 Display *display;
@@ -22,16 +20,20 @@ Window red_button;
 Window green_button;
 Window blue_button;
 
-GC gc;
-
 /*
-    Текущий цвет рисования
+    GC для рисования
 */
 
-unsigned long current_color;
+GC draw_gc;
 
 /*
-    Цвета X11
+    GC для интерфейса
+*/
+
+GC ui_gc;
+
+/*
+    Цвета
 */
 
 XColor red_color;
@@ -39,22 +41,22 @@ XColor green_color;
 XColor blue_color;
 
 /*
-    Флаг рисования
+    Рисуем ли сейчас
 */
 
 int drawing = 0;
 
 /*
-    Предыдущая позиция мыши
+    Последняя точка
 */
 
 int last_x = 0;
 int last_y = 0;
 
 /*
-    ==================================================
-    РИСОВАНИЕ КНОПОК
-    ==================================================
+    ==========================================
+    РИСУЕМ КНОПКУ
+    ==========================================
 */
 
 void draw_button(
@@ -62,43 +64,24 @@ void draw_button(
     const char *text
 ) {
 
-    /*
-        Кнопки всегда рисуем чёрным цветом
-    */
-
-    XSetForeground(
-        display,
-        gc,
-        BlackPixel(
-            display,
-            DefaultScreen(display)
-        )
-    );
-
-    /*
-        Рамка
-    */
-
     XDrawRectangle(
         display,
         button,
-        gc,
+        ui_gc,
 
-        0, 0,
+        0,
+        0,
 
-        98, 48
+        98,
+        48
     );
-
-    /*
-        Текст
-    */
 
     XDrawString(
         display,
         button,
-        gc,
+        ui_gc,
 
-        25,
+        20,
         28,
 
         text,
@@ -107,9 +90,9 @@ void draw_button(
 }
 
 /*
-    ==================================================
+    ==========================================
     MAIN
-    ==================================================
+    ==========================================
 */
 
 int main() {
@@ -122,14 +105,15 @@ int main() {
 
     display = XOpenDisplay(NULL);
 
-    if (display == NULL) {
+    if (!display) {
 
         printf("Ошибка подключения к X11\n");
 
         return 1;
     }
 
-    int screen = DefaultScreen(display);
+    int screen =
+        DefaultScreen(display);
 
     /*
         ==========================================
@@ -137,24 +121,25 @@ int main() {
         ==========================================
     */
 
-    main_window = XCreateSimpleWindow(
+    main_window =
+        XCreateSimpleWindow(
 
-        display,
+            display,
 
-        RootWindow(display, screen),
+            RootWindow(display, screen),
 
-        100,
-        100,
+            100,
+            100,
 
-        1000,
-        700,
+            1000,
+            700,
 
-        1,
+            1,
 
-        BlackPixel(display, screen),
+            BlackPixel(display, screen),
 
-        WhitePixel(display, screen)
-    );
+            WhitePixel(display, screen)
+        );
 
     /*
         ==========================================
@@ -162,62 +147,65 @@ int main() {
         ==========================================
     */
 
-    red_button = XCreateSimpleWindow(
+    red_button =
+        XCreateSimpleWindow(
 
-        display,
+            display,
 
-        main_window,
+            main_window,
 
-        20,
-        20,
+            20,
+            20,
 
-        100,
-        50,
+            100,
+            50,
 
-        1,
+            1,
 
-        BlackPixel(display, screen),
+            BlackPixel(display, screen),
 
-        WhitePixel(display, screen)
-    );
+            WhitePixel(display, screen)
+        );
 
-    green_button = XCreateSimpleWindow(
+    green_button =
+        XCreateSimpleWindow(
 
-        display,
+            display,
 
-        main_window,
+            main_window,
 
-        140,
-        20,
+            140,
+            20,
 
-        100,
-        50,
+            100,
+            50,
 
-        1,
+            1,
 
-        BlackPixel(display, screen),
+            BlackPixel(display, screen),
 
-        WhitePixel(display, screen)
-    );
+            WhitePixel(display, screen)
+        );
 
-    blue_button = XCreateSimpleWindow(
+    blue_button =
+        XCreateSimpleWindow(
 
-        display,
+            display,
 
-        main_window,
+            main_window,
 
-        260,
-        20,
+            260,
+            20,
 
-        100,
-        50,
+            100,
+            50,
 
-        1,
+            1,
 
-        BlackPixel(display, screen),
+            BlackPixel(display, screen),
 
-        WhitePixel(display, screen)
-    );
+            WhitePixel(display, screen)
+        );
 
     /*
         ==========================================
@@ -245,7 +233,7 @@ int main() {
         red_button,
 
         ExposureMask |
-        ButtonReleaseMask
+        ButtonPressMask
     );
 
     XSelectInput(
@@ -255,7 +243,7 @@ int main() {
         green_button,
 
         ExposureMask |
-        ButtonReleaseMask
+        ButtonPressMask
     );
 
     XSelectInput(
@@ -265,34 +253,53 @@ int main() {
         blue_button,
 
         ExposureMask |
-        ButtonReleaseMask
+        ButtonPressMask
     );
 
     /*
         ==========================================
-        GC
+        СОЗДАЁМ GC
         ==========================================
     */
 
-    gc = XCreateGC(
+    draw_gc =
+        XCreateGC(
+            display,
+            main_window,
+            0,
+            NULL
+        );
+
+    ui_gc =
+        XCreateGC(
+            display,
+            main_window,
+            0,
+            NULL
+        );
+
+    /*
+        UI всегда чёрный
+    */
+
+    XSetForeground(
+
         display,
-        main_window,
-        0,
-        NULL
+        ui_gc,
+
+        BlackPixel(display, screen)
     );
 
     /*
-        ==========================================
-        НАСТРОЙКА ЛИНИЙ
-        ==========================================
+        Толщина линии
     */
 
     XSetLineAttributes(
 
         display,
-        gc,
+        draw_gc,
 
-        3,
+        8,
 
         LineSolid,
         CapRound,
@@ -301,16 +308,16 @@ int main() {
 
     /*
         ==========================================
-        ПОЛУЧАЕМ ЦВЕТА
+        ЦВЕТА
         ==========================================
     */
 
-    Colormap colormap;
+    Colormap colormap =
+        DefaultColormap(display, screen);
 
-    colormap = DefaultColormap(
-        display,
-        screen
-    );
+    /*
+        RED
+    */
 
     XAllocNamedColor(
 
@@ -323,16 +330,24 @@ int main() {
         &red_color
     );
 
+    /*
+        GREEN
+    */
+
     XAllocNamedColor(
 
         display,
         colormap,
 
-        "green",
+        "lime",
 
         &green_color,
         &green_color
     );
+
+    /*
+        BLUE
+    */
 
     XAllocNamedColor(
 
@@ -346,20 +361,15 @@ int main() {
     );
 
     /*
-        ==========================================
-        ЦВЕТ ПО УМОЛЧАНИЮ
-        ==========================================
+        Цвет по умолчанию
     */
 
-    current_color = BlackPixel(
-        display,
-        screen
-    );
-
     XSetForeground(
+
         display,
-        gc,
-        current_color
+        draw_gc,
+
+        BlackPixel(display, screen)
     );
 
     /*
@@ -371,7 +381,7 @@ int main() {
     XStoreName(
         display,
         main_window,
-        "Лаба 3 - Paint Colors"
+        "Lab 3"
     );
 
     /*
@@ -411,53 +421,25 @@ int main() {
 
         if (event.type == Expose) {
 
-            /*
-                Главное окно
-            */
-
             if (
                 event.xany.window ==
                 main_window
             ) {
 
-                /*
-                    Текст интерфейса рисуем чёрным
-                */
-
-                XSetForeground(
-                    display,
-                    gc,
-                    BlackPixel(display, screen)
-                );
-
                 XDrawString(
 
                     display,
                     main_window,
-                    gc,
+                    ui_gc,
 
                     20,
                     100,
 
-                    "Рисуйте мышью. ESC - выход",
+                    "Рисуйте мышью ниже кнопок",
 
-                    31
-                );
-
-                /*
-                    Возвращаем текущий цвет
-                */
-
-                XSetForeground(
-                    display,
-                    gc,
-                    current_color
+                    30
                 );
             }
-
-            /*
-                КНОПКИ
-            */
 
             else if (
                 event.xany.window ==
@@ -502,11 +484,76 @@ int main() {
         if (event.type == ButtonPress) {
 
             /*
-                Рисуем
-                только в главном окне
+                RED BUTTON
             */
 
             if (
+                event.xany.window ==
+                red_button
+            ) {
+
+                printf(
+                    "Выбран красный цвет\n"
+                );
+
+                XSetForeground(
+
+                    display,
+                    draw_gc,
+
+                    red_color.pixel
+                );
+            }
+
+            /*
+                GREEN BUTTON
+            */
+
+            else if (
+                event.xany.window ==
+                green_button
+            ) {
+
+                printf(
+                    "Выбран зеленый цвет\n"
+                );
+
+                XSetForeground(
+
+                    display,
+                    draw_gc,
+
+                    green_color.pixel
+                );
+            }
+
+            /*
+                BLUE BUTTON
+            */
+
+            else if (
+                event.xany.window ==
+                blue_button
+            ) {
+
+                printf(
+                    "Выбран синий цвет\n"
+                );
+
+                XSetForeground(
+
+                    display,
+                    draw_gc,
+
+                    blue_color.pixel
+                );
+            }
+
+            /*
+                РИСОВАНИЕ
+            */
+
+            else if (
                 event.xany.window ==
                 main_window
             ) {
@@ -516,13 +563,22 @@ int main() {
                     Button1
                 ) {
 
-                    drawing = 1;
+                    /*
+                        Не рисуем поверх кнопок
+                    */
 
-                    last_x =
-                        event.xbutton.x;
+                    if (
+                        event.xbutton.y > 90
+                    ) {
 
-                    last_y =
-                        event.xbutton.y;
+                        drawing = 1;
+
+                        last_x =
+                            event.xbutton.x;
+
+                        last_y =
+                            event.xbutton.y;
+                    }
                 }
             }
         }
@@ -535,7 +591,11 @@ int main() {
 
         if (event.type == MotionNotify) {
 
-            if (drawing) {
+            if (
+                drawing &&
+                event.xany.window ==
+                main_window
+            ) {
 
                 int current_x =
                     event.xmotion.x;
@@ -543,25 +603,11 @@ int main() {
                 int current_y =
                     event.xmotion.y;
 
-                /*
-                    Устанавливаем цвет рисования
-                */
-
-                XSetForeground(
-                    display,
-                    gc,
-                    current_color
-                );
-
-                /*
-                    Рисуем линию
-                */
-
                 XDrawLine(
 
                     display,
                     main_window,
-                    gc,
+                    draw_gc,
 
                     last_x,
                     last_y,
@@ -589,69 +635,6 @@ int main() {
         if (event.type == ButtonRelease) {
 
             drawing = 0;
-
-            /*
-                RED
-            */
-
-            if (
-                event.xany.window ==
-                red_button
-            ) {
-
-                current_color =
-                    red_color.pixel;
-
-                XSetForeground(
-                    display,
-                    gc,
-                    current_color
-                );
-
-                printf("Выбран RED\n");
-            }
-
-            /*
-                GREEN
-            */
-
-            else if (
-                event.xany.window ==
-                green_button
-            ) {
-
-                current_color =
-                    green_color.pixel;
-
-                XSetForeground(
-                    display,
-                    gc,
-                    current_color
-                );
-
-                printf("Выбран GREEN\n");
-            }
-
-            /*
-                BLUE
-            */
-
-            else if (
-                event.xany.window ==
-                blue_button
-            ) {
-
-                current_color =
-                    blue_color.pixel;
-
-                XSetForeground(
-                    display,
-                    gc,
-                    current_color
-                );
-
-                printf("Выбран BLUE\n");
-            }
         }
 
         /*
@@ -662,20 +645,15 @@ int main() {
 
         if (event.type == KeyPress) {
 
-            KeySym key;
+            KeySym key =
+                XLookupKeysym(
+                    &event.xkey,
+                    0
+                );
 
-            key = XLookupKeysym(
-                &event.xkey,
-                0
-            );
-
-            /*
-                ESC
-            */
-
-            if (key == XK_Escape) {
-
-                printf("Выход...\n");
+            if (
+                key == XK_Escape
+            ) {
 
                 break;
             }
@@ -688,34 +666,19 @@ int main() {
         ==========================================
     */
 
-    XFreeGC(
-        display,
-        gc
-    );
+    XFreeGC(display, draw_gc);
 
-    XDestroyWindow(
-        display,
-        red_button
-    );
+    XFreeGC(display, ui_gc);
 
-    XDestroyWindow(
-        display,
-        green_button
-    );
+    XDestroyWindow(display, red_button);
 
-    XDestroyWindow(
-        display,
-        blue_button
-    );
+    XDestroyWindow(display, green_button);
 
-    XDestroyWindow(
-        display,
-        main_window
-    );
+    XDestroyWindow(display, blue_button);
 
-    XCloseDisplay(
-        display
-    );
+    XDestroyWindow(display, main_window);
+
+    XCloseDisplay(display);
 
     return 0;
 }
