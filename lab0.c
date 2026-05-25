@@ -8,7 +8,7 @@
 int main() {
     Display *display;
     Window window;
-    Window button_window;  // НОВОЕ: окно для кнопки
+    Window button_window;
     XEvent event;
     GC gc;
     
@@ -62,7 +62,7 @@ int main() {
         ButtonReleaseMask
     );
 
-    XStoreName(display, window, "Лаба 1 XLIB");
+    XStoreName(display, window, "lab 1 XLIB");
     gc = XCreateGC(display, window, 0, NULL);
     
     XMapWindow(display, window);
@@ -85,8 +85,8 @@ int main() {
                     window,
                     gc,
                     50, 50,
-                    "Привет XLIB!",
-                    strlen("Привет XLIB!")
+                    "Hello XLIB!",
+                    strlen("Hello XLIB!")
                 );
             }
             else if (event.xany.window == button_window) {
@@ -103,8 +103,8 @@ int main() {
                     button_window,
                     gc,
                     70, 35,
-                    "КНОПКА",
-                    strlen("КНОПКА")
+                    "BUTTON",
+                    strlen("BUTTON")
                 );
             }
         }
