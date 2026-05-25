@@ -1,3 +1,9 @@
+привет. я сдал лабу, но преподаватель сделал несколько замечаний:
+1) он сказал, что кнопка должна быть как дочерний класс - это я исправил
+2) он сказал, что кнопка должна реагировать не тогда, когда мы на нее нажимаем, а тогда, когда мы ОТЖИМАЕМ мышь - это я тоже исправил
+3) самое сложное, что я не понял как исправить
+он сказал, что, когда мы зажали лкм по кнопке и если мы вдруг отводим мышь за ее зону и отжали лкм, ТО кнопка не должна реагировать
+вот мой код, помоги его переделать:
 #include <X11/Xutil.h>
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
@@ -8,8 +14,10 @@
 int main() {
     Display *display;
     Window window;
+    Window button_window;  // НОВОЕ: окно для кнопки
     XEvent event;
     GC gc;
+    
     display = XOpenDisplay(NULL);
     if (display == NULL) {
 
@@ -19,6 +27,8 @@ int main() {
     }
 
     int screen = DefaultScreen(display);
+    
+    // СОЗДАЁМ ГЛАВНОЕ ОКНО
     window = XCreateSimpleWindow(
         display,
         RootWindow(display, screen),
@@ -29,50 +39,80 @@ int main() {
         WhitePixel(display, screen)
     );
 
+    // СОЗДАЁМ ДОЧЕРНЕЕ ОКНО ДЛЯ КНОПКИ 
+    button_window = XCreateSimpleWindow(
+        display,
+        window, 
+        100, 100, 
+        200, 60, 
+        1,
+        BlackPixel(display, screen),
+        WhitePixel(display, screen)
+    );
+
     XSelectInput(
         display,
         window,
         ExposureMask |
         KeyPressMask |
-        ButtonPressMask
+        ButtonPressMask |
+        ButtonReleaseMask
+    );
+    
+    // НОВОЕ: выбираем события для окна кнопки
+    XSelectInput(
+        display,
+        button_window,
+        ExposureMask |
+        ButtonPressMask |
+        ButtonReleaseMask
     );
 
     XStoreName(display, window, "Лаба 1 XLIB");
     gc = XCreateGC(display, window, 0, NULL);
+    
     XMapWindow(display, window);
+    XMapWindow(display, button_window);
 
     while (1) {
         XNextEvent(display, &event);
+        
         /*
             =========================
             СОБЫТИЕ ПЕРЕРИСОВКИ
             =========================
         */
         if (event.type == Expose) {
-            XDrawString(
-                display,
-                window,
-                gc,
-                50, 50,
-                "Привет XLIB!",
-                strlen("Привет XLIB!")
-            );
-            
-            XDrawRectangle(
-                display,
-                window,
-                gc,
-                100, 100,
-                200, 60
-            );
-            XDrawString(
-                display,
-                window,
-                gc,
-                160, 135,
-                "КНОПКА",
-                strlen("КНОПКА")
-            );
+            // Проверяем, какое окно перерисовывается
+            if (event.xany.window == window) {
+                // Рисуем в главном окне
+                XDrawString(
+                    display,
+                    window,
+                    gc,
+                    50, 50,
+                    "Привет XLIB!",
+                    strlen("Привет XLIB!")
+                );
+            }
+            else if (event.xany.window == button_window) {
+                // Рисуем в окне кнопки
+                XDrawRectangle(
+                    display,
+                    button_window,
+                    gc,
+                    0, 0,
+                    199, 59
+                );
+                XDrawString(
+                    display,
+                    button_window,
+                    gc,
+                    70, 35,
+                    "КНОПКА",
+                    strlen("КНОПКА")
+                );
+            }
         }
 
         /*
@@ -102,21 +142,26 @@ int main() {
             СОБЫТИЕ МЫШИ
             =========================
         */
-        if (event.type == ButtonPress) {
-            int x = event.xbutton.x;
-            int y = event.xbutton.y;
-            printf("Клик мыши: %d %d\n", x, y);
-            if (x >= 100 &&
-                x <= 300 &&
-                y >= 100 &&
-                y <= 160)
-            {
-                printf("Кнопка нажата!\n");
-            }
-        }
+        if (event.type == ButtonRelease) {
+            if (event.xany.window == button_window) {
+                int x = event.xbutton.x;
+                int y = event.xbutton.y;
+
+                /*
+                    Проверяем:
+                    находится ли курсор
+                    внутри кнопки
+                */
+                if (x >= 0 && x <= 199 &&
+                    y >= 0 && y <= 59)
+                {
+                    printf("Кнопка нажата!\n");
+                }
     }
+}
 
     XFreeGC(display, gc);
+    XDestroyWindow(display, button_window); 
     XDestroyWindow(display, window);
     XCloseDisplay(display);
     return 0;
