@@ -151,8 +151,9 @@ int main() {
                 {
                     printf("Кнопка нажата!\n");
                 }
+            }
+        }
     }
-}
 
     XFreeGC(display, gc);
     XDestroyWindow(display, button_window); 
