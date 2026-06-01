@@ -266,11 +266,11 @@ int main()
 
     char *paragraphs[] =
     {
-        "Системное программирование изучает принципы работы операционных систем и взаимодействие программ с аппаратным обеспечением. Одним из основных инструментов графического программирования в Linux является библиотека Xlib.",
+        "Systems programming studies the operating principles of operating systems and software that interact with hardware. One of the primary tools for graphical programming in Linux is the Xlib library.",
 
-        "Библиотека Xlib предоставляет низкоуровневый интерфейс для работы с оконной системой X11. С ее помощью можно создавать окна, обрабатывать события клавиатуры и мыши, а также выполнять графический вывод.",
+        "The Xlib library provides a low-level interface for working with the X11 windowing system. It can be used to create windows, handle keyboard and mouse events, and perform graphical output.",
 
-        "При изменении размеров окна текст должен автоматически переверстываться. При этом абзацы сохраняются и не смешиваются между собой."
+        "When the window size changes, the text should automatically reflow. Paragraphs should be preserved and not blended."
     };
 
     int paragraph_count = 3;
