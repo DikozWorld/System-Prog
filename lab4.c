@@ -13,6 +13,9 @@
 
 #define LINE_HEIGHT 20
 
+#define MAX_PARAGRAPHS 100
+#define MAX_PARAGRAPH_LEN 4096
+
 /*
     =====================================
     ФУНКЦИЯ ВЫРАВНИВАНИЯ ПО ШИРИНЕ
@@ -247,189 +250,143 @@ int drawParagraph(
     =====================================
 */
 
-int main()
+// ИЗМЕНЕНИЕ: Добавили параметры argc и argv для чтения аргументов командной строки
+int main(int argc, char *argv[])
 {
     Display *display;
-
     Window window;
-
     GC gc;
-
     XEvent event;
 
-    int current_width =
-        WIDTH;
+    int current_width = WIDTH;
 
     /*
-        Исходный текст
+        =====================================
+        ОБРАБОТКА АРГУМЕНТОВ И ЧТЕНИЕ ФАЙЛА
+        =====================================
     */
+    char paragraphs[MAX_PARAGRAPHS][MAX_PARAGRAPH_LEN];
+    int paragraph_count = 0;
 
-    char *paragraphs[] =
+    // Имя файла по умолчанию
+    char *filename = "input.txt";
+
+    // Проверяем: если argc > 1, значит пользователь передал аргумент при запуске
+    if (argc > 1)
     {
-        "Systems programming studies the operating principles of operating systems and software that interact with hardware. One of the primary tools for graphical programming in Linux is the Xlib library.",
-
-        "The Xlib library provides a low-level interface for working with the X11 windowing system. It can be used to create windows, handle keyboard and mouse events, and perform graphical output.",
-
-        "When the window size changes, the text should automatically reflow. Paragraphs should be preserved and not blended."
-    };
-
-    int paragraph_count = 3;
-
-    display = XOpenDisplay(NULL);
-
-    if (!display)
+        filename = argv[1]; // argv[0] — это имя самой программы, а argv[1] — первый аргумент
+        printf("Открываем указанный файл: %s\n", filename);
+    }
+    else
     {
-        printf("Ошибка подключения\n");
+        printf("Аргумент не передан. Используем файл по умолчанию: %s\n", filename);
+    }
+
+    // Открываем файл (теперь имя файла берется из переменной filename)
+    FILE *file = fopen(filename, "r");
+    if (!file)
+    {
+        printf("Ошибка: Не удалось открыть файл \"%s\".\n", filename);
+        // Подсказка пользователю, как правильно запускать программу
+        printf("Инструкция по запуску: %s [имя_файла.txt]\n", argv[0]);
         return 1;
     }
 
-    int screen =
-        DefaultScreen(display);
+    // Читаем файл построчно
+    while (fgets(paragraphs[paragraph_count], MAX_PARAGRAPH_LEN, file))
+    {
+        // Удаляем символ переноса строки \n
+        paragraphs[paragraph_count][strcspn(paragraphs[paragraph_count], "\n")] = 0;
 
-    window =
-        XCreateSimpleWindow(
-            display,
-            RootWindow(
-                display,
-                screen
-            ),
+        if (strlen(paragraphs[paragraph_count]) > 0)
+        {
+            paragraph_count++;
+        }
 
-            100,
-            100,
+        if (paragraph_count >= MAX_PARAGRAPHS)
+        {
+            break;
+        }
+    }
+    fclose(file);
 
-            WIDTH,
-            HEIGHT,
+    /*
+        =====================================
+        ИНИЦИАЛИЗАЦИЯ XLIB
+        =====================================
+    */
 
-            1,
+    display = XOpenDisplay(NULL);
+    if (!display)
+    {
+        printf("Ошибка подключения к X серверу\n");
+        return 1;
+    }
 
-            BlackPixel(
-                display,
-                screen
-            ),
+    int screen = DefaultScreen(display);
 
-            WhitePixel(
-                display,
-                screen
-            )
-        );
-
-    XStoreName(
+    window = XCreateSimpleWindow(
         display,
-        window,
-        "Лаба 4 - Верстка текста"
+        RootWindow(display, screen),
+        100, 100, WIDTH, HEIGHT, 1,
+        BlackPixel(display, screen),
+        WhitePixel(display, screen)
     );
+
+    XStoreName(display, window, "Лаба 4 - Верстка текста из файла");
 
     XSelectInput(
-        display,
-        window,
-
-        ExposureMask |
-        StructureNotifyMask |
-        KeyPressMask
+        display, window,
+        ExposureMask | StructureNotifyMask | KeyPressMask
     );
 
-    gc =
-        XCreateGC(
-            display,
-            window,
-            0,
-            NULL
-        );
+    gc = XCreateGC(display, window, 0, NULL);
+    XMapWindow(display, window);
 
-    XMapWindow(
-        display,
-        window
-    );
+    /*
+        =====================================
+        ГЛАВНЫЙ ЦИКЛ
+        =====================================
+    */
 
     while (1)
     {
-        XNextEvent(
-            display,
-            &event
-        );
+        XNextEvent(display, &event);
 
-        if (
-            event.type ==
-            ConfigureNotify
-        )
+        if (event.type == ConfigureNotify)
         {
-            current_width =
-                event.xconfigure.width;
+            current_width = event.xconfigure.width;
         }
 
-        if (
-            event.type ==
-            Expose
-            ||
-            event.type ==
-            ConfigureNotify
-        )
+        if (event.type == Expose || event.type == ConfigureNotify)
         {
-            XClearWindow(
-                display,
-                window
-            );
+            XClearWindow(display, window);
 
-            XFontStruct *font =
-                XQueryFont(
-                    display,
-                    XGContextFromGC(gc)
-                );
+            XFontStruct *font = XQueryFont(display, XGContextFromGC(gc));
 
-            int y =
-                TOP_MARGIN;
+            int y = TOP_MARGIN;
+            int text_width = current_width - LEFT_MARGIN * 2;
 
-            int text_width =
-                current_width -
-                LEFT_MARGIN * 2;
-
-            for (
-                int i = 0;
-                i < paragraph_count;
-                i++
-            )
+            for (int i = 0; i < paragraph_count; i++)
             {
-                y =
-                    drawParagraph(
-                        display,
-                        window,
-                        gc,
-                        font,
-
-                        paragraphs[i],
-
-                        LEFT_MARGIN,
-                        y,
-
-                        text_width
-                    );
-
-                /*
-                    Пустая строка
-                    между абзацами
-                */
+                y = drawParagraph(
+                    display, window, gc, font,
+                    paragraphs[i],
+                    LEFT_MARGIN, y, text_width
+                );
 
                 y += LINE_HEIGHT;
             }
         }
 
-        if (
-            event.type ==
-            KeyPress
-        )
+        if (event.type == KeyPress)
         {
             break;
         }
     }
 
-    XFreeGC(
-        display,
-        gc
-    );
-
-    XCloseDisplay(
-        display
-    );
+    XFreeGC(display, gc);
+    XCloseDisplay(display);
 
     return 0;
 }
