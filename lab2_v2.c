@@ -37,8 +37,8 @@ struct Cpoint
 {
     int x;
     int y;
-
     enum status flag;
+    unsigned long color; // Хранит цвет (черный или белый для ластика)
 };
 
 typedef struct Cpoint Cpoint;
@@ -67,54 +67,29 @@ static void SetWindowManagerHints(
 )
 {
     XSizeHints size_hints;
-
     XWMHints wm_hints;
     XClassHint class_hint;
     XTextProperty windowname, iconname;
 
     if (
-        !XStringListToTextProperty(
-            &ptrTitle,
-            1,
-            &windowname
-        )
-        ||
-        !XStringListToTextProperty(
-            &ptrITitle,
-            1,
-            &iconname
-        )
+        !XStringListToTextProperty(&ptrTitle, 1, &windowname) ||
+        !XStringListToTextProperty(&ptrITitle, 1, &iconname)
     )
     {
         puts("No memory!");
         exit(1);
     }
 
-    size_hints.flags =
-        PPosition |
-        PSize |
-        PMinSize;
+    size_hints.flags = PPosition | PSize | PMinSize;
+    size_hints.min_width = win_wdt_min;
+    size_hints.min_height = win_hgt_min;
 
-    size_hints.min_width =
-        win_wdt_min;
-
-    size_hints.min_height =
-        win_hgt_min;
-
-    wm_hints.flags =
-        StateHint |
-        InputHint;
-
-    wm_hints.initial_state =
-        NormalState;
-
+    wm_hints.flags = StateHint | InputHint;
+    wm_hints.initial_state = NormalState;
     wm_hints.input = True;
 
-    class_hint.res_name =
-        argv[0];
-
-    class_hint.res_class =
-        PClass;
+    class_hint.res_name = argv[0];
+    class_hint.res_class = PClass;
 
     XSetWMProperties(
         display,
@@ -135,46 +110,26 @@ static void SetWindowManagerHints(
     ==========================================
 */
 
-int main(
-    int argc,
-    char *argv[]
-)
+int main(int argc, char *argv[])
 {
     Display *display;
-
     int screen_number;
-
     Window window;
-
     GC gc;
-
     XEvent report;
 
-    /*
-        МАССИВ ТОЧЕК
-    */
-
     Cpoint *points;
-
     int size = 0;
 
-    /*
-        РЕЖИМ РИСОВАНИЯ
-    */
-
     int drawing = 0;
+    int x0, y0;
 
-    /*
-        ПРЕДЫДУЩАЯ ТОЧКА
-    */
+    // Переменные для цвета и размеров окна
+    unsigned long current_color;
+    int win_width = WIDTH;
+    int win_height = HEIGHT;
 
-    int x0;
-    int y0;
-
-    points =
-        (Cpoint *)malloc(
-            sizeof(Cpoint)
-        );
+    points = (Cpoint *)malloc(sizeof(Cpoint));
 
     /*
         ==========================================
@@ -182,21 +137,13 @@ int main(
         ==========================================
     */
 
-    if (
-        (display =
-            XOpenDisplay(NULL)
-        ) == NULL
-    )
+    if ((display = XOpenDisplay(NULL)) == NULL)
     {
-        puts(
-            "Can not connect to X server!"
-        );
-
+        puts("Can not connect to X server!");
         exit(1);
     }
 
-    screen_number =
-        DefaultScreen(display);
+    screen_number = DefaultScreen(display);
 
     /*
         ==========================================
@@ -204,60 +151,20 @@ int main(
         ==========================================
     */
 
-    window =
-        XCreateSimpleWindow(
-
-            display,
-
-            RootWindow(
-                display,
-                screen_number
-            ),
-
-            X_POS,
-            Y_POS,
-
-            WIDTH,
-            HEIGHT,
-
-            BORDER_WIDTH,
-
-            BlackPixel(
-                display,
-                screen_number
-            ),
-
-            WhitePixel(
-                display,
-                screen_number
-            )
-        );
+    window = XCreateSimpleWindow(
+        display,
+        RootWindow(display, screen_number),
+        X_POS, Y_POS,
+        WIDTH, HEIGHT,
+        BORDER_WIDTH,
+        BlackPixel(display, screen_number),
+        WhitePixel(display, screen_number)
+    );
 
     SetWindowManagerHints(
-
-        display,
-
-        PRG_CLASS,
-
-        argv,
-
-        argc,
-
-        window,
-
-        X_POS,
-        Y_POS,
-
-        WIDTH,
-        HEIGHT,
-
-        WIDTH_MIN,
-        HEIGHT_MIN,
-
-        TITLE,
-        ICON_TITLE,
-
-        0
+        display, PRG_CLASS, argv, argc, window,
+        X_POS, Y_POS, WIDTH, HEIGHT, WIDTH_MIN, HEIGHT_MIN,
+        TITLE, ICON_TITLE, 0
     );
 
     /*
@@ -267,23 +174,12 @@ int main(
     */
 
     XSelectInput(
-
-        display,
-
-        window,
-
-        ExposureMask |
-        ButtonPressMask |
-        ButtonReleaseMask |
-        ButtonMotionMask |
-        StructureNotifyMask |
-        KeyPressMask
+        display, window,
+        ExposureMask | ButtonPressMask | ButtonReleaseMask |
+        ButtonMotionMask | StructureNotifyMask | KeyPressMask
     );
 
-    XMapWindow(
-        display,
-        window
-    );
+    XMapWindow(display, window);
 
     /*
         ==========================================
@@ -291,22 +187,8 @@ int main(
         ==========================================
     */
 
-    gc =
-        XCreateGC(
-            display,
-            window,
-            0,
-            NULL
-        );
-
-    XSetForeground(
-        display,
-        gc,
-        BlackPixel(
-            display,
-            screen_number
-        )
-    );
+    gc = XCreateGC(display, window, 0, NULL);
+    XSetForeground(display, gc, BlackPixel(display, screen_number));
 
     /*
         ==========================================
@@ -316,10 +198,7 @@ int main(
 
     while (1)
     {
-        XNextEvent(
-            display,
-            &report
-        );
+        XNextEvent(display, &report);
 
         switch (report.type)
         {
@@ -328,41 +207,21 @@ int main(
                 ПЕРЕРИСОВКА
                 ==================================
             */
-
             case Expose:
+                if (report.xexpose.count != 0) break;
 
-                if (
-                    report.xexpose.count != 0
-                )
+                for (int i = 0; i < size - 1; i++)
                 {
-                    break;
-                }
-
-                for (
-                    int i = 0;
-                    i < size - 1;
-                    i++
-                )
-                {
-                    if (
-                        points[i].flag != end
-                    )
+                    if (points[i].flag != end)
                     {
+                        XSetForeground(display, gc, points[i].color);
                         XDrawLine(
-
-                            display,
-                            window,
-                            gc,
-
-                            points[i].x,
-                            points[i].y,
-
-                            points[i + 1].x,
-                            points[i + 1].y
+                            display, window, gc,
+                            points[i].x, points[i].y,
+                            points[i + 1].x, points[i + 1].y
                         );
                     }
                 }
-
                 break;
 
             /*
@@ -370,35 +229,40 @@ int main(
                 НАЖАТИЕ МЫШИ
                 ==================================
             */
-
             case ButtonPress:
-
-                drawing = 1;
+                // ЛКМ - карандаш, ПКМ - ластик
+                if (report.xbutton.button == Button1)
+                {
+                    current_color = BlackPixel(display, screen_number);
+                    drawing = 1;
+                }
+                else if (report.xbutton.button == Button3)
+                {
+                    current_color = WhitePixel(display, screen_number);
+                    drawing = 1;
+                }
+                else
+                {
+                    drawing = 0;
+                    break;
+                }
 
                 size++;
+                points = (Cpoint *)realloc(points, size * sizeof(Cpoint));
 
-                points =
-                    (Cpoint *)realloc(
-                        points,
-                        size *
-                        sizeof(Cpoint)
-                    );
+                x0 = report.xbutton.x;
+                y0 = report.xbutton.y;
 
-                x0 =
-                    report.xbutton.x;
+                // Ограничения
+                if (x0 < 0) x0 = 0;
+                if (x0 > win_width) x0 = win_width;
+                if (y0 < 0) y0 = 0;
+                if (y0 > win_height) y0 = win_height;
 
-                y0 =
-                    report.xbutton.y;
-
-                points[size - 1].x =
-                    x0;
-
-                points[size - 1].y =
-                    y0;
-
-                points[size - 1].flag =
-                    begin;
-
+                points[size - 1].x = x0;
+                points[size - 1].y = y0;
+                points[size - 1].flag = begin;
+                points[size - 1].color = current_color;
                 break;
 
             /*
@@ -406,17 +270,12 @@ int main(
                 ОТПУСКАНИЕ МЫШИ
                 ==================================
             */
-
             case ButtonRelease:
-
                 drawing = 0;
-
                 if (size > 0)
                 {
-                    points[size - 1].flag =
-                        end;
+                    points[size - 1].flag = end;
                 }
-
                 break;
 
             /*
@@ -424,49 +283,32 @@ int main(
                 ДВИЖЕНИЕ МЫШИ
                 ==================================
             */
-
             case MotionNotify:
-
                 if (drawing)
                 {
-                    XDrawLine(
+                    int cur_x = report.xmotion.x;
+                    int cur_y = report.xmotion.y;
 
-                        display,
-                        window,
-                        gc,
+                    // Ограничения, чтобы не рисовать за окном
+                    if (cur_x < 0) cur_x = 0;
+                    if (cur_x > win_width) cur_x = win_width;
+                    if (cur_y < 0) cur_y = 0;
+                    if (cur_y > win_height) cur_y = win_height;
 
-                        x0,
-                        y0,
+                    XSetForeground(display, gc, current_color);
+                    XDrawLine(display, window, gc, x0, y0, cur_x, cur_y);
 
-                        report.xmotion.x,
-                        report.xmotion.y
-                    );
-
-                    x0 =
-                        report.xmotion.x;
-
-                    y0 =
-                        report.xmotion.y;
+                    x0 = cur_x;
+                    y0 = cur_y;
 
                     size++;
+                    points = (Cpoint *)realloc(points, size * sizeof(Cpoint));
 
-                    points =
-                        (Cpoint *)realloc(
-                            points,
-                            size *
-                            sizeof(Cpoint)
-                        );
-
-                    points[size - 1].x =
-                        x0;
-
-                    points[size - 1].y =
-                        y0;
-
-                    points[size - 1].flag =
-                        line;
+                    points[size - 1].x = x0;
+                    points[size - 1].y = y0;
+                    points[size - 1].flag = line;
+                    points[size - 1].color = current_color;
                 }
-
                 break;
 
             /*
@@ -474,53 +316,31 @@ int main(
                 ИЗМЕНЕНИЕ РАЗМЕРА ОКНА
                 ==================================
             */
-
             case ConfigureNotify:
+                win_width = report.xconfigure.width;
+                win_height = report.xconfigure.height;
 
-                XClearWindow(
-                    display,
-                    window
-                );
+                XClearWindow(display, window);
 
-                for (
-                    int i = 0;
-                    i < size - 1;
-                    i++
-                )
+                for (int i = 0; i < size - 1; i++)
                 {
-                    if (
-                        points[i].flag != end
-                    )
+                    if (points[i].flag != end)
                     {
+                        XSetForeground(display, gc, points[i].color);
                         XDrawLine(
-
-                            display,
-                            window,
-                            gc,
-
-                            points[i].x,
-                            points[i].y,
-
-                            points[i + 1].x,
-                            points[i + 1].y
+                            display, window, gc,
+                            points[i].x, points[i].y,
+                            points[i + 1].x, points[i + 1].y
                         );
                     }
                 }
-
                 break;
         }
     }
 
     free(points);
-
-    XFreeGC(
-        display,
-        gc
-    );
-
-    XCloseDisplay(
-        display
-    );
+    XFreeGC(display, gc);
+    XCloseDisplay(display);
 
     return 0;
 }
