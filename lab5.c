@@ -1,537 +1,237 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/Xos.h>
+#include <X11/keysym.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <math.h>
-#include <X11/keysymdef.h>
-#define X 0
-#define Y 0
+#include <sys/time.h>
+#include <unistd.h>
+
+// Макросы координат и окна
+#define X_POS 0
+#define Y_POS 0
 #define WIDTH 1200
 #define HEIGHT 800
 #define WIDTH_MIN 50
 #define HEIGHT_MIN 50
 #define BORDER_WIDTH 5
-#define TITLE "Arcadegame"
-#define ICON_TITLE "Arcadegame"
-#define PRG_CLASS "Arcadegame"
 
-double speed =1L;
-Display * display;
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+Display *display;
 GC gc;
 Window window;
-int screen_number, timer=0;
+Pixmap double_buffer;
+int screen_number;
+
+int game_started = 0;
 int game_over = 0;
-enum status{
-    hero,
-    enemy
-};
-struct Object {
-    int color=0x000000;
-    int speed_x=10,speed_y=10;
-    status flag=hero;
-    double x=10,y=10,size=20;
+double elapsed_time = 0.0;
+
+struct {
+    int x, y, w, h;
+    char text[10];
+} start_btn;
+
+// Хищник (Черная птица)
+struct {
+    double x, y;
+    double size;
+    int dir_x, dir_y;
+    double speed; // пикселей в секунду
+} hero;
 
 
-};
+struct {
+    double x, y;
+    double size;
+    double angle;       // Текущий угол (градусы)
+    double angular_spd; // Градусов в секунду (10 град / 0.05 сек = 200 град/сек)
+    double total_dist;  // Суммарный угол для ускорения
+    double radius;      // Радиус полета
+} enemy;
 
-int cheker (Object hero[2]){
-    for (int i=hero[0].y;i<hero[0].y+hero[0].size;++i)
-        if (pow((hero[0].x-hero[1].x-hero[1].size/2)*(hero[0].x-hero[1].x-hero[1].size/2) + (i-hero[1].y-hero[1].size/2)*(i-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].y;i<hero[0].y+hero[0].size;++i)
-        if (pow((hero[0].x+hero[0].size-hero[1].x-hero[1].size/2)*(hero[0].x+hero[0].size-hero[1].x-hero[1].size/2) + (i-hero[1].y-hero[1].size/2)*(i-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].x;i<hero[0].x+hero[0].size;++i)
-        if (pow((i-hero[1].x-hero[1].size/2)*(i-hero[1].x-hero[1].size/2) + (hero[0].y-hero[1].y-hero[1].size/2)*(hero[0].y-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].x;i<hero[0].x+hero[0].size;++i)
-        if (pow((i-hero[1].x-hero[1].size/2)*(i-hero[1].x-hero[1].size/2) + (hero[0].y+hero[0].size-hero[1].y-hero[1].size/2)*(hero[0].y+hero[0].size-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    return 1;
-
+// Получение текущего времени в секундах
+double get_time_sec() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
 }
 
-typedef struct Object Object;
+// Отрисовка всего кадра в буфер
+void render_frame() {
+    // 1. Очищаем фон (заливаем белым)
+    XSetForeground(display, gc, WhitePixel(display, screen_number));
+    XFillRectangle(display, double_buffer, gc, 0, 0, WIDTH, HEIGHT);
 
-void* repaint(void * objects){
-    Object * hero = (Object *) objects;
-    XEvent e;
-    while(!game_over){
-
-        XSetForeground ( display, gc,  0xFFFFFF);
-        XFillArc(display,window,gc, hero[1].x,hero[1].y,hero[1].size,hero[1].size,0,360*64);
-        do{
-            hero[1].speed_x=rand()%4 *50 -4*50/2;
-
-        }while(hero[1].x+hero[1].speed_x-hero[1].size<0 || hero[1].x+hero[1].speed_x+hero[1].size>WIDTH-hero[1].size);
-         do{
-            hero[1].speed_y=rand()%4 *50 -4*50/2;
-
-        }while(hero[1].y+hero[1].speed_y-hero[1].size<0 || hero[1].y+hero[1].speed_y+hero[1].size>HEIGHT-hero[1].size);
-        hero[1].x+=hero[1].speed_x;
-        hero[1].y+=hero[1].speed_y;
-        XSetForeground ( display, gc,  hero[1].color);
-        XFillArc(display,window,gc, hero[1].x,hero[1].y,hero[1].size,hero[1].size,0,360*64);
-        memset(&e, 0, sizeof(e));
-        e.type=Expose;
-        XSendEvent(display, window, false, Expose, &e);
-        XFlush(display);
-        timer+=1;
-        sleep(speed);
-
+    if (!game_started && !game_over) {
+        // Рисуем кнопку
+        XSetForeground(display, gc, BlackPixel(display, screen_number));
+        XFillRectangle(display, double_buffer, gc, start_btn.x, start_btn.y, start_btn.w, start_btn.h);
+        XSetForeground(display, gc, WhitePixel(display, screen_number));
+        XDrawString(display, double_buffer, gc, start_btn.x + 25, start_btn.y + 25, start_btn.text, strlen(start_btn.text));
     }
-Window totalscore;
-GC gct;
-char seconds[64],msg[64]="Total time: ";
-sprintf(seconds,"%d",timer);
-strncat (msg,seconds,strlen(msg));
-strncat (msg," seconds.",strlen(msg));
-totalscore=XCreateSimpleWindow ( display,RootWindow ( display, screen_number ),WIDTH/2, HEIGHT/2, 500, 300, BORDER_WIDTH,BlackPixel ( display, screen_number ),WhitePixel ( display, screen_number ) );
-XSelectInput ( display, totalscore, ButtonPressMask | ButtonReleaseMask);
-XMapWindow ( display, totalscore );
-gct= XCreateGC ( display, totalscore, 0 , NULL );
-XDrawString(display, totalscore, gct, 500/3-strlen(msg), 300/2, msg, strlen(msg));
-printf("%s",msg);
-
-}
-void herorepaint(Display * display,GC gc,Window window, Object hero,int color){
-    XSetForeground ( display, gc,  color);
-    XFillRectangle(display,window,gc, hero.x,hero.y,hero.size,hero.size);
-}
-static void SetWindowManagerHints (
- Display * display,
- char * PClass,
- char * argv[],
- int argc,
- Window window,
- int x,
- int y,
- int win_wdt,
- int win_hgt,
- int win_wdt_min,
- int win_hgt_min,
- char * ptrTitle,
- char * ptrITitle,
- Pixmap pixmap
-)
-{
- XSizeHints size_hints;
- XWMHints wm_hints;
- XClassHint class_hint;
- XTextProperty windowname, iconname;
-
- if ( !XStringListToTextProperty (&ptrTitle, 1, &windowname ) ||
-    !XStringListToTextProperty (&ptrITitle, 1, &iconname ) ) {
-  puts ( "No memory!\n");
-  exit ( 1 );
-}
-
-size_hints.flags = PPosition | PSize | PMinSize;
-size_hints.min_width = win_wdt_min;
-size_hints.min_height = win_hgt_min;
-wm_hints.flags = StateHint | IconPixmapHint | InputHint;
-wm_hints.initial_state = NormalState;
-wm_hints.input = True;
-wm_hints.icon_pixmap= pixmap;
-class_hint.res_name = argv[0];
-class_hint.res_class = PClass;
-
-XSetWMProperties ( display, window, &windowname,
-  &iconname, argv, argc, &size_hints, &wm_hints,
-  &class_hint );
-}
-
-
-
-int main(int argc, char *argv[])
-{
-srand(time(NULL));
-XEvent report;
-Object heroes[2];
-heroes[1].flag=enemy;
-KeySym keycd;
-char keystr[1];
-int flag=1;
-GC gct;
- if ( ( display = XOpenDisplay ( NULL ) ) == NULL ) {
-    puts ("Can not connect to the X server!\n");
-    exit ( 1 );
- }
-
-screen_number = DefaultScreen ( display );
-window = XCreateSimpleWindow ( display,
-                               RootWindow ( display, screen_number ),
-                               X, Y, WIDTH, HEIGHT, BORDER_WIDTH,
-                               BlackPixel ( display, screen_number ),
-                               WhitePixel ( display, screen_number ) );
-SetWindowManagerHints ( display, PRG_CLASS, argv, argc,
-                        window, X, Y, WIDTH, HEIGHT, WIDTH_MIN,
-                        HEIGHT_MIN, TITLE, ICON_TITLE, 0 );
-
-XSelectInput ( display, window, ExposureMask | KeyPressMask);
-XMapWindow ( display, window );
-pthread_t enemy_thread;
-for(int i=0; i<2;++i){
-    if(heroes[i].flag==enemy){
-        heroes[i].x=WIDTH-heroes[i].size-10;
-        heroes[i].y=HEIGHT-heroes[i].size-10;
-        heroes[i].color=0xFF0000;
+    else if (game_over) {
+        char msg[128];
+        sprintf(msg, "Game over, time of game: %.2f sec.", elapsed_time);
+        XSetForeground(display, gc, BlackPixel(display, screen_number));
+        XDrawString(display, double_buffer, gc, WIDTH / 2 - 100, HEIGHT / 2, msg, strlen(msg));
     }
-}
-gc = XCreateGC ( display, window, 0 , NULL );
-pthread_create(&enemy_thread, NULL, repaint, (void *)heroes);
+    else {
+        // Рисуем Черную птицу (квадрат)
+        XSetForeground(display, gc, 0x000000);
+        XFillRectangle(display, double_buffer, gc, (int)hero.x, (int)hero.y, (int)hero.size, (int)hero.size);
 
-flag=cheker(heroes);
- while (1) {
-       for(int i=0;i<2;++i){
-        XSetForeground ( display, gc,heroes[i].color);
-        if(heroes[i].flag==hero)
-            XFillRectangle(display,window,gc, heroes[i].x,heroes[i].y,heroes[i].size,heroes[i].size);
-        else
-            XFillArc(display,window,gc, heroes[i].x,heroes[i].y,heroes[i].size,heroes[i].size,0,360*64);}
-
-    if(!flag){
-        game_over = 1;
-        XClearWindow(display, window);
-        char seconds[64];
-        char msg[64] = "Total time: ";
-        sprintf(seconds, "%d", timer);
-        strcat(msg, seconds);
-        strcat(msg, " seconds.");
-        XDrawString(
-            display,
-            window,
-            gc,
-            WIDTH / 3,
-            HEIGHT / 2,
-            msg,
-            strlen(msg)
-        );
-        XFlush(display);
-        sleep(3);
-        break;
+        // Рисуем Синюю птицу (круг)
+        XSetForeground(display, gc, 0x0000FF);
+        XFillArc(display, double_buffer, gc, (int)enemy.x, (int)enemy.y, (int)enemy.size, (int)enemy.size, 0, 360 * 64);
     }
 
-
-    XNextEvent ( display, &report );#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xos.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <math.h>
-#include <X11/keysymdef.h>
-#define X 0
-#define Y 0
-#define WIDTH 1200
-#define HEIGHT 800
-#define WIDTH_MIN 50
-#define HEIGHT_MIN 50
-#define BORDER_WIDTH 5
-#define TITLE "Arcadegame"
-#define ICON_TITLE "Arcadegame"
-#define PRG_CLASS "Arcadegame"
-
-double speed =1L;
-Display * display;
-GC gc;
-Window window;
-int screen_number, timer=0;
-int game_over = 0;
-enum status{
-    hero,
-    enemy
-};
-struct Object {
-    int color=0x000000;
-    int speed_x=10,speed_y=10;
-    status flag=hero;
-    double x=10,y=10,size=20;
-
-
-};
-
-int cheker (Object hero[2]){
-    for (int i=hero[0].y;i<hero[0].y+hero[0].size;++i)
-        if (pow((hero[0].x-hero[1].x-hero[1].size/2)*(hero[0].x-hero[1].x-hero[1].size/2) + (i-hero[1].y-hero[1].size/2)*(i-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].y;i<hero[0].y+hero[0].size;++i)
-        if (pow((hero[0].x+hero[0].size-hero[1].x-hero[1].size/2)*(hero[0].x+hero[0].size-hero[1].x-hero[1].size/2) + (i-hero[1].y-hero[1].size/2)*(i-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].x;i<hero[0].x+hero[0].size;++i)
-        if (pow((i-hero[1].x-hero[1].size/2)*(i-hero[1].x-hero[1].size/2) + (hero[0].y-hero[1].y-hero[1].size/2)*(hero[0].y-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    for (int i=hero[0].x;i<hero[0].x+hero[0].size;++i)
-        if (pow((i-hero[1].x-hero[1].size/2)*(i-hero[1].x-hero[1].size/2) + (hero[0].y+hero[0].size-hero[1].y-hero[1].size/2)*(hero[0].y+hero[0].size-hero[1].y-hero[1].size/2),0.5)<hero[1].size/2)
-            return 0;
-    return 1;
-
+    // Копируем готовый кадр из буфера на экран (мгновенно, без мерцания)
+    XCopyArea(display, double_buffer, window, gc, 0, 0, WIDTH, HEIGHT, 0, 0);
+    XFlush(display);
 }
 
-typedef struct Object Object;
+// Проверка поимки с точностью 10х10 (ТЗ №3)
+int check_capture() {
+    double cx_hero = hero.x + hero.size / 2.0;
+    double cy_hero = hero.y + hero.size / 2.0;
+    double cx_enemy = enemy.x + enemy.size / 2.0;
+    double cy_enemy = enemy.y + enemy.size / 2.0;
 
-void* repaint(void * objects){
-    Object * hero = (Object *) objects;
-    XEvent e;
-    while(!game_over){
-
-        XSetForeground ( display, gc,  0xFFFFFF);
-        XFillArc(display,window,gc, hero[1].x,hero[1].y,hero[1].size,hero[1].size,0,360*64);
-        do{
-            hero[1].speed_x=rand()%4 *50 -4*50/2;
-
-        }while(hero[1].x+hero[1].speed_x-hero[1].size<0 || hero[1].x+hero[1].speed_x+hero[1].size>WIDTH-hero[1].size);
-         do{
-            hero[1].speed_y=rand()%4 *50 -4*50/2;
-
-        }while(hero[1].y+hero[1].speed_y-hero[1].size<0 || hero[1].y+hero[1].speed_y+hero[1].size>HEIGHT-hero[1].size);
-        hero[1].x+=hero[1].speed_x;
-        hero[1].y+=hero[1].speed_y;
-        XSetForeground ( display, gc,  hero[1].color);
-        XFillArc(display,window,gc, hero[1].x,hero[1].y,hero[1].size,hero[1].size,0,360*64);
-        memset(&e, 0, sizeof(e));
-        e.type=Expose;
-        XSendEvent(display, window, false, Expose, &e);
-        XFlush(display);
-        timer+=1;
-        sleep(speed);
-
+    if (fabs(cx_hero - cx_enemy) <= 10.0 && fabs(cy_hero - cy_enemy) <= 10.0) {
+        return 1;
     }
-Window totalscore;
-GC gct;
-char seconds[64],msg[64]="Total time: ";
-sprintf(seconds,"%d",timer);
-strncat (msg,seconds,strlen(msg));
-strncat (msg," seconds.",strlen(msg));
-totalscore=XCreateSimpleWindow ( display,RootWindow ( display, screen_number ),WIDTH/2, HEIGHT/2, 500, 300, BORDER_WIDTH,BlackPixel ( display, screen_number ),WhitePixel ( display, screen_number ) );
-XSelectInput ( display, totalscore, ButtonPressMask | ButtonReleaseMask);
-XMapWindow ( display, totalscore );
-gct= XCreateGC ( display, totalscore, 0 , NULL );
-XDrawString(display, totalscore, gct, 500/3-strlen(msg), 300/2, msg, strlen(msg));
-printf("%s",msg);
-
-}
-void herorepaint(Display * display,GC gc,Window window, Object hero,int color){
-    XSetForeground ( display, gc,  color);
-    XFillRectangle(display,window,gc, hero.x,hero.y,hero.size,hero.size);
-}
-static void SetWindowManagerHints (
- Display * display,
- char * PClass,
- char * argv[],
- int argc,
- Window window,
- int x,
- int y,
- int win_wdt,
- int win_hgt,
- int win_wdt_min,
- int win_hgt_min,
- char * ptrTitle,
- char * ptrITitle,
- Pixmap pixmap
-)
-{
- XSizeHints size_hints;
- XWMHints wm_hints;
- XClassHint class_hint;
- XTextProperty windowname, iconname;
-
- if ( !XStringListToTextProperty (&ptrTitle, 1, &windowname ) ||
-    !XStringListToTextProperty (&ptrITitle, 1, &iconname ) ) {
-  puts ( "No memory!\n");
-  exit ( 1 );
+    return 0;
 }
 
-size_hints.flags = PPosition | PSize | PMinSize;
-size_hints.min_width = win_wdt_min;
-size_hints.min_height = win_hgt_min;
-wm_hints.flags = StateHint | IconPixmapHint | InputHint;
-wm_hints.initial_state = NormalState;
-wm_hints.input = True;
-wm_hints.icon_pixmap= pixmap;
-class_hint.res_name = argv[0];
-class_hint.res_class = PClass;
-
-XSetWMProperties ( display, window, &windowname,
-  &iconname, argv, argc, &size_hints, &wm_hints,
-  &class_hint );
-}
-
-
-
-int main(int argc, char *argv[])
-{
-srand(time(NULL));
-XEvent report;
-Object heroes[2];
-heroes[1].flag=enemy;
-KeySym keycd;
-char keystr[1];
-int flag=1;
-GC gct;
- if ( ( display = XOpenDisplay ( NULL ) ) == NULL ) {
-    puts ("Can not connect to the X server!\n");
-    exit ( 1 );
- }
-
-screen_number = DefaultScreen ( display );
-window = XCreateSimpleWindow ( display,
-                               RootWindow ( display, screen_number ),
-                               X, Y, WIDTH, HEIGHT, BORDER_WIDTH,
-                               BlackPixel ( display, screen_number ),
-                               WhitePixel ( display, screen_number ) );
-SetWindowManagerHints ( display, PRG_CLASS, argv, argc,
-                        window, X, Y, WIDTH, HEIGHT, WIDTH_MIN,
-                        HEIGHT_MIN, TITLE, ICON_TITLE, 0 );
-
-XSelectInput ( display, window, ExposureMask | KeyPressMask);
-XMapWindow ( display, window );
-pthread_t enemy_thread;
-for(int i=0; i<2;++i){
-    if(heroes[i].flag==enemy){
-        heroes[i].x=WIDTH-heroes[i].size-10;
-        heroes[i].y=HEIGHT-heroes[i].size-10;
-        heroes[i].color=0xFF0000;
+int main(int argc, char *argv[]) {
+    if ((display = XOpenDisplay(NULL)) == NULL) {
+        puts("Can not connect to the X server!\n");
+        exit(1);
     }
-}
-gc = XCreateGC ( display, window, 0 , NULL );
-pthread_create(&enemy_thread, NULL, repaint, (void *)heroes);
+    screen_number = DefaultScreen(display);
 
-flag=cheker(heroes);
- while (1) {
-       for(int i=0;i<2;++i){
-        XSetForeground ( display, gc,heroes[i].color);
-        if(heroes[i].flag==hero)
-            XFillRectangle(display,window,gc, heroes[i].x,heroes[i].y,heroes[i].size,heroes[i].size);
-        else
-            XFillArc(display,window,gc, heroes[i].x,heroes[i].y,heroes[i].size,heroes[i].size,0,360*64);}
+    // Настройка стартовых параметров
+    start_btn.w = 80; start_btn.h = 40;
+    start_btn.x = (WIDTH - start_btn.w) / 2;
+    start_btn.y = (HEIGHT - start_btn.h) / 2;
+    strcpy(start_btn.text, "Пуск");
 
-    if(!flag){
-        game_over = 1;
-        XClearWindow(display, window);
-        char seconds[64];
-        char msg[64] = "Total time: ";
-        sprintf(seconds, "%d", timer);
-        strcat(msg, seconds);
-        strcat(msg, " seconds.");
-        XDrawString(
-            display,
-            window,
-            gc,
-            WIDTH / 3,
-            HEIGHT / 2,
-            msg,
-            strlen(msg)
-        );
-        XFlush(display);
-        sleep(3);
-        break;
-    }
+    hero.x = 50; hero.y = 50; hero.size = 30;
+    hero.dir_x = 0; hero.dir_y = 0; hero.speed = 600.0; // Очень быстрая, чтобы поймать жертву
 
+    enemy.size = 20;
+    enemy.angle = 0.0;
+    enemy.radius = 150.0;
+    enemy.angular_spd = 200.0; // 10 градусов за 0.05 сек = 200 град в секунду
+    enemy.total_dist = 0.0;
 
-    XNextEvent ( display, &report );
+    // Создание окна
+    window = XCreateSimpleWindow(display, RootWindow(display, screen_number),
+                                 X_POS, Y_POS, WIDTH, HEIGHT, BORDER_WIDTH,
+                                 BlackPixel(display, screen_number),
+                                 WhitePixel(display, screen_number));
 
-    switch ( report.type ) {
-        case Expose :
-            if ( report.xexpose.count != 0 )
-                break;
-            break;
-        case KeyPress:
-            memset(keystr,0,sizeof(keystr));
-            XLookupString(&report.xkey,keystr,
-                            sizeof (keystr), &keycd, NULL);
-            if(*keystr=='w'){
-                    if(heroes[0].y>0){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].y-=heroes[0].speed_y;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
+    // Создаем буфер для плавного рисования
+    double_buffer = XCreatePixmap(display, window, WIDTH, HEIGHT, DefaultDepth(display, screen_number));
+    gc = XCreateGC(display, window, 0, NULL);
+
+    XSelectInput(display, window, ExposureMask | KeyPressMask | ButtonPressMask);
+    XMapWindow(display, window);
+
+    // Игровой цикл
+    double last_time = get_time_sec();
+    XEvent report;
+    KeySym key;
+
+    while (1) {
+        double current_time = get_time_sec();
+        double dt = current_time - last_time; // дельта времени в секундах (обычно ~0.016 для 60FPS)
+        last_time = current_time;
+
+        // 1. Обработка всех накопившихся событий (без зависаний)
+        while (XPending(display)) {
+            XNextEvent(display, &report);
+            switch (report.type) {
+                case Expose:
+                    render_frame();
+                    break;
+                case ButtonPress:
+                    if (!game_started && !game_over && report.xbutton.button == Button1) {
+                        if (report.xbutton.x >= start_btn.x && report.xbutton.x <= start_btn.x + start_btn.w &&
+                            report.xbutton.y >= start_btn.y && report.xbutton.y <= start_btn.y + start_btn.h) {
+                            game_started = 1;
+                        }
                     }
+                    break;
+                case KeyPress:
+                    if (!game_started || game_over) break;
+                    key = XLookupKeysym(&report.xkey, 0);
+                    if (key == XK_Left)       { hero.dir_x = -1; hero.dir_y = 0; }
+                    else if (key == XK_Right) { hero.dir_x = 1;  hero.dir_y = 0; }
+                    else if (key == XK_Up)    { hero.dir_x = 0;  hero.dir_y = -1; }
+                    else if (key == XK_Down)  { hero.dir_x = 0;  hero.dir_y = 1; }
+                    else if (key == XK_Escape) { game_over = 1; }
+                    break;
             }
-               else if(*keystr=='s'){
-                    if(heroes[0].y<HEIGHT-heroes[0].size){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].y+=heroes[0].speed_y;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
+        }
 
-                }
+        // 2. Физика (только если игра идет)
+        if (game_started && !game_over) {
+            elapsed_time += dt;
 
+            // --- Хищник ---
+            hero.x += hero.dir_x * hero.speed * dt;
+            hero.y += hero.dir_y * hero.speed * dt;
 
-           else if(*keystr== 'a'){
-                    if(heroes[0].x>0){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].x-=heroes[0].speed_x;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
-           }
-             else if(*keystr=='d'){
-                    if(heroes[0].x<WIDTH-heroes[0].size){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].x+=heroes[0].speed_x;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
-             }
-            break;
-         }
+            // Остановка об края (до упора)
+            if (hero.x < 0) { hero.x = 0; hero.dir_x = 0; }
+            if (hero.x > WIDTH - hero.size) { hero.x = WIDTH - hero.size; hero.dir_x = 0; }
+            if (hero.y < 0) { hero.y = 0; hero.dir_y = 0; }
+            if (hero.y > HEIGHT - hero.size) { hero.y = HEIGHT - hero.size; hero.dir_y = 0; }
 
- flag=cheker(heroes);
-  }
-  pthread_join(enemy_thread, NULL);
+            // --- Жертва ---
+            double delta_angle = enemy.angular_spd * dt;
+            enemy.angle += delta_angle;
+            enemy.total_dist += delta_angle;
 
-  return 0;
-}
-
-    switch ( report.type ) {
-        case Expose :
-            if ( report.xexpose.count != 0 )
-                break;
-            break;
-        case KeyPress:
-            memset(keystr,0,sizeof(keystr));
-            XLookupString(&report.xkey,keystr,
-                            sizeof (keystr), &keycd, NULL);
-            if(*keystr=='w'){
-                    if(heroes[0].y>0){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].y-=heroes[0].speed_y;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
+            // Ускорение: 1 градус за 0.05с (то есть +20 град/сек) на каждые 360 градусов
+            if (enemy.total_dist >= 360.0) {
+                enemy.angular_spd += 20.0;
+                enemy.total_dist -= 360.0;
             }
-               else if(*keystr=='s'){
-                    if(heroes[0].y<HEIGHT-heroes[0].size){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].y+=heroes[0].speed_y;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
 
-                }
+            // Центр окружности (колебание за 18 секунд)
+            // Амплитуда = W/2, но вычитаем радиус, чтобы круг не улетал за края экрана
+            double amplitude = (WIDTH / 2.0) - enemy.radius - 20;
+            double center_x = (WIDTH / 2.0) + amplitude * sin((2.0 * M_PI * elapsed_time) / 18.0);
+            double center_y = HEIGHT / 2.0;
 
+            enemy.x = center_x + enemy.radius * cos(enemy.angle * M_PI / 180.0) - (enemy.size / 2.0);
+            enemy.y = center_y + enemy.radius * sin(enemy.angle * M_PI / 180.0) - (enemy.size / 2.0);
 
-           else if(*keystr== 'a'){
-                    if(heroes[0].x>0){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].x-=heroes[0].speed_x;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
-           }
-             else if(*keystr=='d'){
-                    if(heroes[0].x<WIDTH-heroes[0].size){
-                        herorepaint(display,gc,window,heroes[0],0xFFFFFF);
-                        heroes[0].x+=heroes[0].speed_x;
-                        herorepaint(display,gc,window,heroes[0],heroes[0].color);
-                    }
-             }
-            break;
-         }
+            // --- Поимка ---
+            if (check_capture()) {
+                game_over = 1;
+            }
+        }
 
- flag=cheker(heroes);
-  }
-  pthread_join(enemy_thread, NULL);
+        // 3. Отрисовка
+        render_frame();
 
-  return 0;
+        // 4. Пауза 16 миллисекунд (~60 FPS), чтобы не грузить процессор
+        usleep(16000);
+
+        if (game_over && key == XK_Escape) break; // Выход
+    }
+
+    XFreePixmap(display, double_buffer);
+    XFreeGC(display, gc);
+    XDestroyWindow(display, window);
+    XCloseDisplay(display);
+    return 0;
 }
