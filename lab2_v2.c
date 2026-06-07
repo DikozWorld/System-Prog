@@ -230,41 +230,42 @@ int main(int argc, char *argv[])
                 ==================================
             */
             case ButtonPress:
-                // ЛКМ - карандаш, ПКМ - ластик
                 if (report.xbutton.button == Button1)
                 {
+                    // ЛКМ - карандаш
                     current_color = BlackPixel(display, screen_number);
                     drawing = 1;
+
+                    // Добавляем начальную точку только для ЛКМ
+                    size++;
+                    points = (Cpoint *)realloc(points, size * sizeof(Cpoint));
+
+                    x0 = report.xbutton.x;
+                    y0 = report.xbutton.y;
+
+                    // Ограничения
+                    if (x0 < 0) x0 = 0;
+                    if (x0 > win_width) x0 = win_width;
+                    if (y0 < 0) y0 = 0;
+                    if (y0 > win_height) y0 = win_height;
+
+                    points[size - 1].x = x0;
+                    points[size - 1].y = y0;
+                    points[size - 1].flag = begin;
+                    points[size - 1].color = current_color;
                 }
                 else if (report.xbutton.button == Button3)
                 {
-                    current_color = WhitePixel(display, screen_number);
-                    drawing = 1;
+                    // ПКМ - полная очистка холста
+                    XClearWindow(display, window); // Стираем всё визуально
+                    size = 0;                      // Обнуляем счетчик массива точек
+                    drawing = 0;                   // Гарантируем, что не рисуем
                 }
                 else
                 {
                     drawing = 0;
-                    break;
                 }
-
-                size++;
-                points = (Cpoint *)realloc(points, size * sizeof(Cpoint));
-
-                x0 = report.xbutton.x;
-                y0 = report.xbutton.y;
-
-                // Ограничения
-                if (x0 < 0) x0 = 0;
-                if (x0 > win_width) x0 = win_width;
-                if (y0 < 0) y0 = 0;
-                if (y0 > win_height) y0 = win_height;
-
-                points[size - 1].x = x0;
-                points[size - 1].y = y0;
-                points[size - 1].flag = begin;
-                points[size - 1].color = current_color;
                 break;
-
             /*
                 ==================================
                 ОТПУСКАНИЕ МЫШИ
