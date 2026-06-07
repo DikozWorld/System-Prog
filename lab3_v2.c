@@ -182,34 +182,37 @@ int main(int argc, char *argv[])
                 }
                 else {
                     // Кликнули по основному окну для рисования
-                    // ИЗМЕНЕНИЕ: Ластик на ПКМ (Button3), Карандаш на ЛКМ (Button1)
                     if (report.xbutton.button == Button1) {
+                        // ЛКМ - рисуем выбранным цветом
                         current_draw_color = color[selected_window];
                         flag = 1;
-                    } else if (report.xbutton.button == Button3) {
-                        current_draw_color = WhitePixel(display, screen_number);
-                        flag = 1;
-                    } else {
-                        flag = 0; // Игнорируем другие кнопки
-                        break;
+
+                        size++;
+                        points = (Cpoint*)realloc(points, size * sizeof(Cpoint));
+
+                        x0 = report.xbutton.x;
+                        y0 = report.xbutton.y;
+
+                        // Ограничение координат
+                        if (x0 < 0) x0 = 0;
+                        if (x0 > win_width) x0 = win_width;
+                        if (y0 < 0) y0 = 0;
+                        if (y0 > win_height) y0 = win_height;
+
+                        points[size-1].x = x0;
+                        points[size-1].y = y0;
+                        points[size-1].color = current_draw_color;
+                        points[size-1].flag = begin;
+                    } 
+                    else if (report.xbutton.button == Button3) {
+                        // ПКМ - полная очистка холста
+                        XClearWindow(display, window); // Визуальная очистка
+                        size = 0;                      // Сброс истории линий
+                        flag = 0;                      // Запрет на рисование при движении
+                    } 
+                    else {
+                        flag = 0; // Игнорируем другие кнопки (например, колесико)
                     }
-
-                    size++;
-                    points = (Cpoint*)realloc(points, size * sizeof(Cpoint));
-
-                    x0 = report.xbutton.x;
-                    y0 = report.xbutton.y;
-
-                    // ИЗМЕНЕНИЕ: Ограничение координат
-                    if (x0 < 0) x0 = 0;
-                    if (x0 > win_width) x0 = win_width;
-                    if (y0 < 0) y0 = 0;
-                    if (y0 > win_height) y0 = win_height;
-
-                    points[size-1].x = x0;
-                    points[size-1].y = y0;
-                    points[size-1].color = current_draw_color;
-                    points[size-1].flag = begin;
                 }
                 break;
 
