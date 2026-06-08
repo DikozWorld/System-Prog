@@ -21,9 +21,7 @@
 #define PRG_CLASS "Paint"
 
 /*
-    ==========================================
     ТИП ТОЧКИ
-    ==========================================
 */
 
 enum status
@@ -38,15 +36,13 @@ struct Cpoint
     int x;
     int y;
     enum status flag;
-    unsigned long color; // Хранит цвет (черный или белый для ластика)
+    unsigned long color; 
 };
 
 typedef struct Cpoint Cpoint;
 
 /*
-    ==========================================
     НАСТРОЙКА ОКНА
-    ==========================================
 */
 
 static void SetWindowManagerHints(
@@ -105,9 +101,7 @@ static void SetWindowManagerHints(
 }
 
 /*
-    ==========================================
     MAIN
-    ==========================================
 */
 
 int main(int argc, char *argv[])
@@ -124,7 +118,6 @@ int main(int argc, char *argv[])
     int drawing = 0;
     int x0, y0;
 
-    // Переменные для цвета и размеров окна
     unsigned long current_color;
     int win_width = WIDTH;
     int win_height = HEIGHT;
@@ -132,9 +125,7 @@ int main(int argc, char *argv[])
     points = (Cpoint *)malloc(sizeof(Cpoint));
 
     /*
-        ==========================================
         ПОДКЛЮЧЕНИЕ К X11
-        ==========================================
     */
 
     if ((display = XOpenDisplay(NULL)) == NULL)
@@ -146,9 +137,7 @@ int main(int argc, char *argv[])
     screen_number = DefaultScreen(display);
 
     /*
-        ==========================================
         СОЗДАНИЕ ОКНА
-        ==========================================
     */
 
     window = XCreateSimpleWindow(
@@ -168,9 +157,7 @@ int main(int argc, char *argv[])
     );
 
     /*
-        ==========================================
         СОБЫТИЯ
-        ==========================================
     */
 
     XSelectInput(
@@ -182,18 +169,14 @@ int main(int argc, char *argv[])
     XMapWindow(display, window);
 
     /*
-        ==========================================
         СОЗДАЁМ GC
-        ==========================================
     */
 
     gc = XCreateGC(display, window, 0, NULL);
     XSetForeground(display, gc, BlackPixel(display, screen_number));
 
     /*
-        ==========================================
         ГЛАВНЫЙ ЦИКЛ
-        ==========================================
     */
 
     while (1)
@@ -202,11 +185,6 @@ int main(int argc, char *argv[])
 
         switch (report.type)
         {
-            /*
-                ==================================
-                ПЕРЕРИСОВКА
-                ==================================
-            */
             case Expose:
                 if (report.xexpose.count != 0) break;
 
@@ -224,30 +202,17 @@ int main(int argc, char *argv[])
                 }
                 break;
 
-            /*
-                ==================================
-                НАЖАТИЕ МЫШИ
-                ==================================
-            */
             case ButtonPress:
                 if (report.xbutton.button == Button1)
                 {
-                    // ЛКМ - карандаш
                     current_color = BlackPixel(display, screen_number);
                     drawing = 1;
 
-                    // Добавляем начальную точку только для ЛКМ
                     size++;
                     points = (Cpoint *)realloc(points, size * sizeof(Cpoint));
 
                     x0 = report.xbutton.x;
                     y0 = report.xbutton.y;
-
-                    // Ограничения
-                    if (x0 < 0) x0 = 0;
-                    if (x0 > win_width) x0 = win_width;
-                    if (y0 < 0) y0 = 0;
-                    if (y0 > win_height) y0 = win_height;
 
                     points[size - 1].x = x0;
                     points[size - 1].y = y0;
@@ -256,21 +221,16 @@ int main(int argc, char *argv[])
                 }
                 else if (report.xbutton.button == Button3)
                 {
-                    // ПКМ - полная очистка холста
-                    XClearWindow(display, window); // Стираем всё визуально
-                    size = 0;                      // Обнуляем счетчик массива точек
-                    drawing = 0;                   // Гарантируем, что не рисуем
+                    XClearWindow(display, window); 
+                    size = 0;                      
+                    drawing = 0;                   
                 }
                 else
                 {
                     drawing = 0;
                 }
                 break;
-            /*
-                ==================================
-                ОТПУСКАНИЕ МЫШИ
-                ==================================
-            */
+
             case ButtonRelease:
                 drawing = 0;
                 if (size > 0)
@@ -279,22 +239,11 @@ int main(int argc, char *argv[])
                 }
                 break;
 
-            /*
-                ==================================
-                ДВИЖЕНИЕ МЫШИ
-                ==================================
-            */
             case MotionNotify:
                 if (drawing)
                 {
                     int cur_x = report.xmotion.x;
                     int cur_y = report.xmotion.y;
-
-                    // Ограничения, чтобы не рисовать за окном
-                    if (cur_x < 0) cur_x = 0;
-                    if (cur_x > win_width) cur_x = win_width;
-                    if (cur_y < 0) cur_y = 0;
-                    if (cur_y > win_height) cur_y = win_height;
 
                     XSetForeground(display, gc, current_color);
                     XDrawLine(display, window, gc, x0, y0, cur_x, cur_y);
@@ -312,11 +261,6 @@ int main(int argc, char *argv[])
                 }
                 break;
 
-            /*
-                ==================================
-                ИЗМЕНЕНИЕ РАЗМЕРА ОКНА
-                ==================================
-            */
             case ConfigureNotify:
                 win_width = report.xconfigure.width;
                 win_height = report.xconfigure.height;
