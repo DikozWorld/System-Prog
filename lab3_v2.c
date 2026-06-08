@@ -212,8 +212,6 @@ int main(int argc, char *argv[])
                     int cur_x = report.xmotion.x;
                     int cur_y = report.xmotion.y;
 
-                    // Ограничения координат удалены!
-
                     XSetForeground(display, gc, current_draw_color);
                     XDrawLine(display, window, gc, x0, y0, cur_x, cur_y);
 
