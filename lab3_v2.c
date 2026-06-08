@@ -75,7 +75,6 @@ static void SetWindowManagerHints (
                      &class_hint);
 }
 
-// ИЗМЕНЕНИЕ: Заменены C++ ссылки (&w, &x) на C-указатели (*w, *x)
 void create_color_window(Display *d, Window rootwindow, Window *w, int screen_number, int *x, int y, int color) {
     int size = 20, distance = 7;
     int border_widght = 2;
@@ -89,10 +88,9 @@ void create_color_window(Display *d, Window rootwindow, Window *w, int screen_nu
     *x += size + distance;
 }
 
-// ИЗМЕНЕНИЕ: Заменена ссылка &selected_window на указатель *selected_window
 void set_pero_color(Display *display, GC gc, Window color_window[], int color[], int index, int *selected_window) {
-    XSetWindowBorder(display, color_window[index], 0xFFD700); // Золотая рамка активному
-    XSetWindowBorder(display, color_window[*selected_window], 0x808080); // Серая рамка старому
+    XSetWindowBorder(display, color_window[index], 0xFFD700); 
+    XSetWindowBorder(display, color_window[*selected_window], 0x808080); 
     *selected_window = index;
 }
 
@@ -110,7 +108,6 @@ int main(int argc, char *argv[])
     int left_x = 2;
     int flag = 0, x0, y0, size = 0;
 
-    // Переменные для отслеживания текущего цвета и размера окна
     unsigned long current_draw_color;
     int win_width = WIDTH;
     int win_height = HEIGHT;
@@ -136,7 +133,6 @@ int main(int argc, char *argv[])
     XSelectInput(display, window, ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | StructureNotifyMask);
     XMapWindow(display, window);
 
-    // ИЗМЕНЕНИЕ: Передаем адреса переменных (&color_window[i], &left_x)
     for(int i = 0; i < 4; ++i) {
         create_color_window(display, window, &color_window[i], screen_number, &left_x, 5, color[i]);
         XMapWindow(display, color_window[i]);
@@ -146,7 +142,6 @@ int main(int argc, char *argv[])
     for (int i = 1; i < 4; ++i)
         XSetWindowBorder(display, color_window[i], 0x808080);
 
-    // ИЗМЕНЕНИЕ: Создаем GC ОДИН РАЗ до начала цикла
     gc = XCreateGC(display, window, 0, NULL);
     XSetForeground(display, gc, color[selected_window]);
 
@@ -157,7 +152,6 @@ int main(int argc, char *argv[])
             case Expose:
                 if (report.xexpose.count != 0) break;
 
-                // Перерисовка всех точек
                 for (int i = 0; i < size - 1; ++i) {
                     if (points[i].flag == begin) {
                         XSetForeground(display, gc, points[i].color);
@@ -169,7 +163,6 @@ int main(int argc, char *argv[])
                 break;
 
             case ButtonPress:
-                // Проверяем, кликнули ли по палитре
                 if (report.xbutton.window != window) {
                     if (report.xbutton.window == color_window[0])
                         set_pero_color(display, gc, color_window, color, 0, &selected_window);
@@ -181,9 +174,7 @@ int main(int argc, char *argv[])
                         set_pero_color(display, gc, color_window, color, 3, &selected_window);
                 }
                 else {
-                    // Кликнули по основному окну для рисования
                     if (report.xbutton.button == Button1) {
-                        // ЛКМ - рисуем выбранным цветом
                         current_draw_color = color[selected_window];
                         flag = 1;
 
@@ -193,25 +184,18 @@ int main(int argc, char *argv[])
                         x0 = report.xbutton.x;
                         y0 = report.xbutton.y;
 
-                        // Ограничение координат
-                        if (x0 < 0) x0 = 0;
-                        if (x0 > win_width) x0 = win_width;
-                        if (y0 < 0) y0 = 0;
-                        if (y0 > win_height) y0 = win_height;
-
                         points[size-1].x = x0;
                         points[size-1].y = y0;
                         points[size-1].color = current_draw_color;
                         points[size-1].flag = begin;
                     } 
                     else if (report.xbutton.button == Button3) {
-                        // ПКМ - полная очистка холста
-                        XClearWindow(display, window); // Визуальная очистка
-                        size = 0;                      // Сброс истории линий
-                        flag = 0;                      // Запрет на рисование при движении
+                        XClearWindow(display, window); 
+                        size = 0;                      
+                        flag = 0;                      
                     } 
                     else {
-                        flag = 0; // Игнорируем другие кнопки (например, колесико)
+                        flag = 0; 
                     }
                 }
                 break;
@@ -228,11 +212,7 @@ int main(int argc, char *argv[])
                     int cur_x = report.xmotion.x;
                     int cur_y = report.xmotion.y;
 
-                    // ИЗМЕНЕНИЕ: Ограничение координат при движении
-                    if (cur_x < 0) cur_x = 0;
-                    if (cur_x > win_width) cur_x = win_width;
-                    if (cur_y < 0) cur_y = 0;
-                    if (cur_y > win_height) cur_y = win_height;
+                    // Ограничения координат удалены!
 
                     XSetForeground(display, gc, current_draw_color);
                     XDrawLine(display, window, gc, x0, y0, cur_x, cur_y);
@@ -251,18 +231,15 @@ int main(int argc, char *argv[])
                 break;
 
             case ConfigureNotify:
-                // ИЗМЕНЕНИЕ: Обновляем размеры окна
                 win_width = report.xconfigure.width;
                 win_height = report.xconfigure.height;
 
                 XClearWindow(display, window);
 
-                // Перерисовка палитры (она стирается при ресайзе)
                 for(int i = 0; i < 4; ++i) {
                     XMapWindow(display, color_window[i]);
                 }
 
-                // Перерисовка всех линий
                 for (int i = 0; i < size - 1; ++i) {
                     if (points[i].flag == begin) {
                         XSetForeground(display, gc, points[i].color);
